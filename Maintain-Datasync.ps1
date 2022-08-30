@@ -97,22 +97,22 @@ param (
 
 $ErrorActionPreference = "Stop"
 if ($PreDeployment) {
-    Write-LogInfo "Running predeployment actions"
-    Write-LogInfo "Disabling autosync"
+    Write-Host "Running predeployment actions"
+    Write-Host "Disabling autosync"
     Update-AzSqlSyncGroup -ResourceGroupName $ResourceGroupName `
         -ServerName $ServerName `
         -DatabaseName $DatabaseName `
         -SyncGroupName $SyncGroupName `
         -IntervalInSeconds -1
-    Write-LogInfo "Checking if sync is running"
+    Write-Host "Checking if sync is running"
     while ($(Get-AzSqlSyncGroup -ResourceGroupName $ResourceGroupName `
                 -ServerName $ServerName `
                 -DatabaseName $DatabaseName `
                 -SyncGroupName $SyncGroupName).SyncState -eq "Progressing") {
-        Write-LogInfo "Waiting for sync to finish"
+        Write-Host "Waiting for sync to finish"
         Start-Sleep -Seconds 5
     }
-    Write-LogInfo "All good, fell free to update schema of secondary database"
+    Write-Host "All good, fell free to update schema of secondary database"
 }
 
 if ($PostDeployment) {
@@ -124,7 +124,7 @@ if ($PostDeployment) {
             -DatabaseName $DatabaseName `
             -SyncGroupName $SyncGroupName
 
-    Write-LogInfo "Refreshing database schema from hub database"
+    Write-Host "Refreshing database schema from hub database"
     Update-AzSqlSyncSchema -ResourceGroupName $ResourceGroupName `
         -ServerName $ServerName `
         -DatabaseName $DatabaseName `
@@ -142,15 +142,15 @@ if ($PostDeployment) {
             -ResourceGroupName $ResourceGroupName
         
         if ($databaseSchema.LastUpdateTime -gt $startTime.ToUniversalTime()) {
-            Write-LogInfo "Database schema refreshed"
+            Write-Host "Database schema refreshed"
             $isSucceeded = $true
             break;
         }
-        Write-LogInfo "Waiting untill database schema is refreshed"
+        Write-Host "Waiting untill database schema is refreshed"
     }
 
     if (-not $isSucceeded) {
-        Write-LogError "Refresh failed or timeout"
+        Write-Error "Refresh failed or timeout"
         exit;
     }
     
@@ -190,7 +190,7 @@ if ($PostDeployment) {
             if ($columnsToRemove.Count -gt 0) {
                 foreach ($columnToRemove in $columnsToRemove) {
                     $fullName = $tableSchema.QuotedName + "." + $columnToRemove.QuotedName
-                    Write-LogInfo "Removing $fullName is being removed from sync schema"
+                    Write-Host "Removing $fullName is being removed from sync schema"
                     $tableSchema.Columns.Remove($columnToRemove) | Out-Null
                 }
             }
@@ -199,7 +199,7 @@ if ($PostDeployment) {
 
     if ($tablesToRemove.Count -gt 0) {
         foreach ($tableToRemove in $tablesToRemove) {
-            Write-LogInfo "Removing $($tableToRemove.QuotedName) is being removed from sync schema"
+            Write-Host "Removing $($tableToRemove.QuotedName) is being removed from sync schema"
             $syncGroup.Schema.Tables.Remove($tableToRemove) | Out-Null
         }
     }
@@ -217,7 +217,7 @@ if ($PostDeployment) {
             }
         }
         if (!$shouldIncludeTable) {
-            Write-LogInfo "Table $($tableSchema.QuotedName) does not fit any incule condition, skipping"
+            Write-Host "Table $($tableSchema.QuotedName) does not fit any incule condition, skipping"
             continue
         }
 
@@ -233,7 +233,7 @@ if ($PostDeployment) {
 
         ## If the table is not supported, move to next table
         if ($tableSchema.HasError) {
-            Write-LogWarning "Can't add table $($tableSchema.QuotedName) to the sync schema $($tableSchema.ErrorId)" 
+            Write-Warning "Can't add table $($tableSchema.QuotedName) to the sync schema $($tableSchema.ErrorId)" 
             continue;
         }
 
@@ -243,13 +243,13 @@ if ($PostDeployment) {
             ## If the column already exists in the sync schema or not supported, ignore
             $column = $newTableSchema.Columns | Where-Object QuotedName -eq $columnSchema.QuotedName
             if ($null -ne $column) {
-                Write-LogInfo "Column $fullColumnName is already in the schema"
+                Write-Host "Column $fullColumnName is already in the schema"
             }
             elseif ($columnSchema.HasError) {
-                Write-LogWarning "Can't add column $fullColumnName to the sync schema $($columnSchema.ErrorId)" 
+                Write-Warning "Can't add column $fullColumnName to the sync schema $($columnSchema.ErrorId)" 
             }
             else {
-                Write-LogInfo "Adding $fullColumnName to the sync schema"
+                Write-Host "Adding $fullColumnName to the sync schema"
                 $newColumnSchema = [AzureSqlSyncGroupSchemaColumnModel]::new()
                 $newColumnSchema.QuotedName = $columnSchema.QuotedName
                 $newColumnSchema.DataSize = $columnSchema.DataSize
@@ -263,17 +263,17 @@ if ($PostDeployment) {
     }
     $schemaString = $syncGroup.Schema | ConvertTo-Json -depth 5 -Compress
     $tempFile = "$($env:TEMP)\syncSchema.json"
-    Write-LogInfo "Write the schema to $tempFile"
+    Write-Host "Write the schema to $tempFile"
     $schemaString | Out-File $tempFile
 
     if (!$DryRun){
-        Write-LogInfo "Update the sync schema"
+        Write-Host "Update the sync schema"
         Update-AzSqlSyncGroup -ResourceGroupName $ResourceGroupName `
             -ServerName $ServerName `
             -DatabaseName $DatabaseName `
             -Name $SyncGroupName `
             -SchemaFile $tempFile         
-        Write-LogInfo "Re-enablind autosync"
+        Write-Host "Re-enablind autosync"
         Update-AzSqlSyncGroup -ResourceGroupName $ResourceGroupName `
             -ServerName $ServerName `
             -DatabaseName $DatabaseName `
